@@ -18,6 +18,12 @@ if (!WS) {
 let blocks = [];
 let currentDraftId = null;
 let mode = "builder";
+// KV Cloudflare bersifat eventually consistent (daftar bisa telat s/d ~60 dtk
+// antar-PoP). Hint lokal ini menambal tampilan sesaat setelah simpan/kirim,
+// dan deletedIds menyembunyikan entri yang baru dihapus sampai server sinkron.
+let hintDraft = null;
+let hintHistory = null;
+const deletedIds = new Set();
 
 const BLOCK_TYPES = ["heading", "paragraph", "blockquote", "photo", "divider", "details", "pre", "collage", "footer"];
 const TYPE_LABEL = { heading: "Judul", paragraph: "Paragraf", blockquote: "Quote", photo: "Foto", divider: "Divider", details: "Details (lipat)", pre: "Pre / Kode", collage: "Collage", footer: "Footer" };
@@ -349,10 +355,12 @@ async function refreshLists() {
   try {
     const d = await api("/api/drafts");
     if (!d.ok) { dl.textContent = "⚠️ " + d.error; }
-    else if (!d.drafts.length) { dl.textContent = "Belum ada draft tersimpan."; }
     else {
-      dl.innerHTML = "";
-      d.drafts.forEach((it) => {
+      const items = d.drafts.filter((x) => !deletedIds.has(x.id));
+      if (hintDraft && !items.some((x) => x.id === hintDraft.id) && !deletedIds.has(hintDraft.id)) items.unshift(hintDraft);
+      if (!items.length) { dl.textContent = "Belum ada draft tersimpan."; }
+      else { dl.innerHTML = "";
+      items.forEach((it) => {
         const row = document.createElement("div"); row.className = "item";
         row.innerHTML = `<span class="badge draft">DRAFT</span><div class="meta">${esc(it.title)}<small>${it.blocks_count} blok · ${fmtDate(it.updated_at)}</small></div>`;
         const open = document.createElement("button"); open.className = "small"; open.textContent = "Buka";
@@ -364,18 +372,21 @@ async function refreshLists() {
           renderBlocks(); setMode("builder");
         });
         const del = document.createElement("button"); del.className = "small"; del.textContent = "🗑";
-        del.addEventListener("click", async () => { await api(`/api/drafts?id=${encodeURIComponent(it.id)}`, { method: "DELETE" }); if (currentDraftId === it.id) currentDraftId = null; refreshLists(); });
+        del.addEventListener("click", async () => { deletedIds.add(it.id); if (hintDraft && hintDraft.id === it.id) hintDraft = null; await api(`/api/drafts?id=${encodeURIComponent(it.id)}`, { method: "DELETE" }); if (currentDraftId === it.id) currentDraftId = null; refreshLists(); });
         row.append(open, del); dl.appendChild(row);
       });
+      }
     }
   } catch (e) { dl.textContent = "⚠️ Gagal memuat draft: " + e.message; }
   try {
     const h = await api("/api/history");
     if (!h.ok) { hl.textContent = "⚠️ " + h.error; }
-    else if (!h.history.length) { hl.textContent = "Belum ada riwayat kirim."; }
     else {
-      hl.innerHTML = "";
-      h.history.forEach((it) => {
+      const items = h.history.filter((x) => !deletedIds.has(x.id));
+      if (hintHistory && !items.some((x) => x.id === hintHistory.id) && !deletedIds.has(hintHistory.id)) items.unshift(hintHistory);
+      if (!items.length) { hl.textContent = "Belum ada riwayat kirim."; }
+      else { hl.innerHTML = "";
+      items.forEach((it) => {
         const row = document.createElement("div"); row.className = "item";
         row.innerHTML = `<span class="badge sent">${it.ok ? "TERKIRIM" : "GAGAL"}</span><div class="meta">${esc(it.title || "(tanpa judul)")}<small>${esc(it.method)} → ${esc(it.chat_id)}${it.message_id ? " · msg " + esc(it.message_id) : ""} · ${fmtDate(it.ts)}</small></div>`;
         const load = document.createElement("button"); load.className = "small"; load.textContent = "Muat";
@@ -395,9 +406,10 @@ async function refreshLists() {
           row.appendChild(ed);
         }
         const del = document.createElement("button"); del.className = "small"; del.textContent = "🗑";
-        del.addEventListener("click", async () => { await api(`/api/history?id=${encodeURIComponent(it.id)}`, { method: "DELETE" }); refreshLists(); });
+        del.addEventListener("click", async () => { deletedIds.add(it.id); if (hintHistory && hintHistory.id === it.id) hintHistory = null; await api(`/api/history?id=${encodeURIComponent(it.id)}`, { method: "DELETE" }); refreshLists(); });
         row.appendChild(del); hl.appendChild(row);
       });
+      }
     }
   } catch (e) { hl.textContent = "⚠️ Gagal memuat riwayat: " + e.message; }
 }
@@ -408,7 +420,11 @@ $("#saveDraft").addEventListener("click", async () => {
   const out = $("#sendResult"); out.innerHTML = "";
   if (!blocks.length) { out.innerHTML = '<div class="err-box">Isi pesan masih kosong.</div>'; return; }
   const res = await api("/api/drafts", { method: "POST", body: JSON.stringify({ id: currentDraftId, title: $("#draftTitle").value.trim(), blocks, form: formData() }) });
-  if (res.ok) { currentDraftId = res.id; out.innerHTML = '<div class="ok-box">💾 Draft tersimpan di server.</div>'; refreshLists(); }
+  if (res.ok) {
+    currentDraftId = res.id;
+    hintDraft = { id: res.id, title: $("#draftTitle").value.trim() || "(tanpa judul)", updated_at: res.updated_at, blocks_count: blocks.length, form: formData() };
+    out.innerHTML = '<div class="ok-box">💾 Draft tersimpan di server.</div>'; refreshLists();
+  }
   else out.innerHTML = `<div class="err-box">Gagal menyimpan draft: ${esc(res.error || "?")}</div>`;
 });
 
@@ -440,10 +456,12 @@ $("#send").addEventListener("click", async () => {
   }
   // Catat riwayat di server (tanpa token).
   const firstHeading = blocks.find((b) => b.type === "heading");
-  await api("/api/history", { method: "POST", body: JSON.stringify({
+  const histTitle = $("#draftTitle").value.trim() || (firstHeading ? anyText(firstHeading) : "");
+  const hr = await api("/api/history", { method: "POST", body: JSON.stringify({
     method, chat_id: chatRaw, thread_id: thread, message_id: msgId, ok: !!res.ok,
-    title: $("#draftTitle").value.trim() || (firstHeading ? anyText(firstHeading) : ""), blocks,
-  }) }).catch(() => {});
+    title: histTitle, blocks,
+  }) }).catch(() => null);
+  if (hr && hr.ok) hintHistory = { id: hr.id, ts: Date.now(), method, chat_id: chatRaw, thread_id: thread, message_id: msgId != null ? String(msgId) : null, ok: !!res.ok, title: histTitle, blocks };
   refreshLists();
 });
 

@@ -32,7 +32,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC = os.path.join(ROOT, "public")
 KV_ID = "d56e2b340f4e4205a4af7f599de60ade"
 COMPAT = "2026-10-12"
-FILES = ["index.html", "style.css", "app.js", "_worker.js"]
+FILES = ["index.html", "style.css", "app.js"]  # _worker.js dikirim sebagai part multipart khusus saat deployment (advanced mode), bukan aset statis
 CTYPES = {"html": "text/html", "css": "text/css", "js": "application/javascript"}
 
 
@@ -118,13 +118,17 @@ def main():
             content_type="application/json", jwt=jwt)
     print("upsert:", r.get("success"), flush=True)
 
-    # 5) deployment dengan manifest
+    # 5) deployment: manifest aset + part _worker.js (advanced mode)
     boundary = uuid.uuid4().hex
     manifest = json.dumps({assets[h][0]: h for h in hashes})
+    worker_code = open(os.path.join(PUBLIC, "_worker.js"), "rb").read()
     body = b"".join([
         f"--{boundary}\r\n".encode(),
         b'Content-Disposition: form-data; name="manifest"\r\n'
         b"Content-Type: application/json\r\n\r\n" + manifest.encode() + b"\r\n",
+        f"--{boundary}\r\n".encode(),
+        b'Content-Disposition: form-data; name="_worker.js"; filename="_worker.js"\r\n'
+        b"Content-Type: application/javascript\r\n\r\n" + worker_code + b"\r\n",
         f"--{boundary}--\r\n".encode(),
     ])
     r = api("POST", f"/client/v4/accounts/{aid}/pages/projects/{NAME}/deployments",
