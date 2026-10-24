@@ -297,6 +297,13 @@ function parseChatId(v) {
   v = String(v || "").trim();
   return /^-?\d+$/.test(v) ? Number(v) : v;
 }
+// Peringatan dinamis: @username hanya untuk channel/grup publik, bukan PM.
+$("#chatId").addEventListener("input", (e) => {
+  const v = e.target.value.trim();
+  $("#chatHint").textContent = v.startsWith("@")
+    ? "⚠️ @username hanya untuk channel/grup publik. Untuk kirim ke PM, pakai ID angka dari tombol getUpdates di atas."
+    : "";
+});
 async function tgCall(method, payload) {
   const token = tokenEl.value.trim();
   if (!token) throw new Error("Bot token masih kosong.");
@@ -323,7 +330,7 @@ $("#findChats").addEventListener("click", async () => {
         const o = u[k]; if (o && o.chat) seen.set(String(o.chat.id), `${o.chat.title || o.chat.username || o.chat.first_name || ""} (${o.chat.type})`);
       }
     }
-    if (!seen.size) { box.textContent = "Belum ada chat yang terlihat — kirim pesan ke bot / jadikan bot admin channel dulu, lalu coba lagi."; return; }
+    if (!seen.size) { box.textContent = "Belum ada chat yang terlihat — bot belum pernah menerima pesan. Mau kirim ke PM? Buka bot di Telegram, tekan Start / kirim pesan, lalu klik tombol ini lagi; chat kamu akan muncul sebagai ID angka. Untuk channel: jadikan bot admin dulu."; return; }
     box.innerHTML = "";
     seen.forEach((label, id) => {
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "small ghost";

@@ -60,6 +60,8 @@ button.primary { background: var(--accent2); border-color: var(--accent2); color
   padding: 10px; overflow: auto; font-size: .78rem; max-height: 260px; }
 .ok-box { border: 1px solid var(--ok); color: var(--ok); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
 .err-box { border: 1px solid var(--err); color: var(--err); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.pmhint { margin-top: 10px; padding: 9px 11px; font-size: .85rem; background: rgba(84,169,235,.09);
+  border: 1px solid rgba(84,169,235,.35); border-radius: 9px; }
 .listbox .item { display: flex; gap: 8px; align-items: center; padding: 8px 10px;
   background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; flex-wrap: wrap; }
 .listbox .item .meta { flex: 1; min-width: 160px; color: var(--text); font-size: .88rem; }
