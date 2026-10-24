@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HaruRich — Telegram Rich Message Sender</title>
+<meta name="description" content="Kirim pesan Telegram Rich Text (Bot API sendRichMessage) dari browser pakai bot token kamu sendiri. Builder bebas, draft & riwayat tersimpan per workspace.">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🌸 <b>HaruRich</b> <span>Telegram Rich Message Sender</span></div>
+  <div class="top-links">
+    <a href="https://core.telegram.org/bots/api#rich-messages" target="_blank" rel="noopener">Docs Bot API</a>
+    <a href="https://github.com/harumisatou/haru-rich" target="_blank" rel="noopener">GitHub</a>
+  </div>
+</header>
+
+<div class="notice">
+  🔒 <b>Token bot kamu TIDAK disimpan di server ini.</b> Browser kamu memanggil
+  <code>api.telegram.org</code> langsung dengan token yang kamu ketik. Yang disimpan di server
+  hanya <b>draft &amp; riwayat isi pesan</b> (tanpa token), dipisah per workspace anonim di perangkat ini.
+  <label class="remember"><input type="checkbox" id="rememberToken"> Ingat token di perangkat ini saja (localStorage)</label>
+</div>
+
+<main class="layout">
+  <section class="panel">
+    <h2>1 · Bot &amp; Tujuan</h2>
+    <label>Bot Token <span class="hint">dari @BotFather</span></label>
+    <div class="row">
+      <input type="password" id="token" placeholder="123456789:AA...." autocomplete="off">
+      <button type="button" id="toggleToken" class="small">👁</button>
+      <button type="button" id="checkBot" class="small">Cek Bot</button>
+    </div>
+    <div id="botInfo" class="muted"></div>
+
+    <label>Method</label>
+    <select id="method">
+      <option value="sendRichMessage">sendRichMessage — kirim pesan baru</option>
+      <option value="editMessageText">editMessageText — edit pesan yang sudah terkirim</option>
+    </select>
+
+    <div class="row">
+      <div class="grow">
+        <label>Chat ID / @username tujuan</label>
+        <input type="text" id="chatId" placeholder="-100xxxxxxxxxx atau @channel">
+      </div>
+      <div>
+        <label>Topic ID <span class="hint">opsional</span></label>
+        <input type="text" id="threadId" placeholder="123" inputmode="numeric">
+      </div>
+    </div>
+    <div class="row" id="msgIdRow" style="display:none">
+      <div class="grow">
+        <label>Message ID yang diedit</label>
+        <input type="text" id="messageId" placeholder="456" inputmode="numeric">
+      </div>
+    </div>
+    <button type="button" id="findChats" class="small ghost">🔍 Ambil chat_id dari getUpdates (chat yang pernah bot lihat)</button>
+    <div id="chatList" class="muted"></div>
+  </section>
+
+  <section class="panel">
+    <h2>2 · Isi Pesan Rich Text</h2>
+    <div class="tabs">
+      <button type="button" data-mode="builder" class="tab active">🧱 Builder</button>
+      <button type="button" data-mode="json" class="tab">{ } JSON</button>
+      <button type="button" data-mode="preview" class="tab">👁 Preview</button>
+      <span class="spacer"></span>
+      <select id="preset" title="Muat preset">
+        <option value="">Preset…</option>
+        <option value="blank">Kosong</option>
+        <option value="announce">📣 Pengumuman</option>
+        <option value="release">📦 Rilisan (ala Haru)</option>
+        <option value="tutorial">📚 Tutorial</option>
+      </select>
+    </div>
+
+    <div id="modeBuilder">
+      <div id="blocks"></div>
+      <div class="addrow">
+        <span>Tambah blok:</span>
+        <button type="button" data-add="heading">Judul</button>
+        <button type="button" data-add="paragraph">Paragraf</button>
+        <button type="button" data-add="blockquote">Quote</button>
+        <button type="button" data-add="photo">Foto</button>
+        <button type="button" data-add="divider">Divider</button>
+        <button type="button" data-add="details">Details (lipat)</button>
+        <button type="button" data-add="pre">Pre / Kode</button>
+        <button type="button" data-add="collage">Collage</button>
+        <button type="button" data-add="footer">Footer</button>
+      </div>
+    </div>
+
+    <div id="modeJson" style="display:none">
+      <textarea id="jsonText" rows="18" spellcheck="false" placeholder='{"blocks": [ ... ]}'></textarea>
+      <div class="row">
+        <button type="button" id="applyJson" class="small">Terapkan JSON → Builder</button>
+        <span id="jsonError" class="error"></span>
+      </div>
+      <p class="muted">Mode JSON menerima <code>{"blocks":[...]}</code> atau array blok langsung. Semua blok Telegram Rich didukung di sini, termasuk yang belum ada editor visualnya.</p>
+    </div>
+
+    <div id="modePreview" style="display:none">
+      <div id="preview" class="tg-preview"></div>
+      <p class="muted">Preview ini perkiraan tampilan — hasil asli mengikuti aplikasi Telegram.</p>
+    </div>
+
+    <div class="counters"><span id="blockCount">0 blok</span> · <span id="charCount">0 karakter</span> <span class="hint">(batas Telegram: 500 blok &amp; ±32.768 karakter)</span></div>
+
+    <div class="sendrow">
+      <input type="text" id="draftTitle" placeholder="Judul draft / catatan (opsional)">
+      <button type="button" id="saveDraft">💾 Simpan Draft</button>
+      <button type="button" id="send" class="primary">🚀 Kirim</button>
+    </div>
+    <div id="sendResult"></div>
+  </section>
+
+  <section class="panel">
+    <h2>3 · Draft &amp; Riwayat <span class="hint">tersimpan di server, per workspace perangkat ini</span></h2>
+    <div class="row">
+      <button type="button" id="newDraft" class="small ghost">➕ Baru</button>
+      <button type="button" id="refreshLists" class="small ghost">↻ Muat ulang</button>
+      <span class="muted" id="wsInfo"></span>
+    </div>
+    <h3>Draft</h3>
+    <div id="draftList" class="listbox muted">Memuat…</div>
+    <h3>Riwayat kirim</h3>
+    <div id="historyList" class="listbox muted">Memuat…</div>
+  </section>
+</main>
+
+<footer class="foot">
+  Dibuat oleh Haru 🌸 — jawaban tantangan komunitas Kurumi 2.0. Pesan rich hanya bisa dikirim <b>bot</b> (Bot API 10.1+, mode blocks 10.2+), dan bot harus jadi admin di channel/grup tujuan.
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>
