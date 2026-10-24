@@ -1,0 +1,9 @@
+name = "harurich"
+pages_build_output_dir = "public"
+compatibility_date = "2026-10-12"
+
+# Draft & riwayat HaruRich (per workspace anonim). BUKAN untuk token bot —
+# token tidak pernah disimpan di server.
+[[kv_namespaces]]
+binding = "HARURICH_KV"
+id = "d56e2b340f4e4205a4af7f599de60ade"
